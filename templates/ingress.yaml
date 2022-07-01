@@ -1,0 +1,71 @@
+{{- $prefix := printf "%v-" .Values.prefix | replace "<nil>-" "" -}}
+{{- $suffix := printf "-%v" .Values.suffix | replace "-<nil>" "" -}}
+{{- $prefix2 := printf "%v-" .Values.prefix | replace "<nil>-" "" }}
+{{- $enable := dict "key" "" }}
+{{- range $key, $val := .Values -}}
+{{- with $val -}}
+{{- if ( and (ne $key "prefix") (ne $key "suffix") ) -}}
+{{- if .host -}}
+{{$_ := set $enable "key" $key }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $enable := pluck "key" $enable }}
+
+{{- if index $enable 0 -}}
+
+{{- range $key, $val := .Values -}}
+{{- $name := printf "%v%v%v" $prefix $key $suffix }}
+{{- with $val -}}
+{{- if ( and (ne $key "prefix") (ne $key "suffix") ) -}}
+{{- if .host -}}
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+    release: {{ $name }}
+  {{- if .ingressAnnotations }}
+  annotations:
+{{ toYaml .ingressAnnotations | indent 4 }}
+  {{- end }}
+spec:
+  {{- if .tls }}
+  tls:
+  {{- range $key, $val := .tls }}
+  - secretName: {{ $key }}
+  {{- if $val }}
+    hosts:
+  {{- $domain := splitList ";" $val }}
+  {{- range $domain }}
+    - {{ printf "%s" . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- end -}}
+  {{- end }}
+  ingressClassName: nginx
+  rules:
+{{- range $k, $val := .host}}
+    {{- $domain := splitList ";" $val }}
+    {{- range $domain }}
+    - host: {{ printf "%s" . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ printf "%v%v%v" $prefix2 $key $suffix }}
+                port:
+                  number: {{ $k }}
+{{- end }}
+---
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
